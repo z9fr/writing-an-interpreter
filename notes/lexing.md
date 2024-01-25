@@ -2,7 +2,7 @@
 
 ## Lexical Analysis
 
-- in order to work with sourcecode, we need to convert it to more accessable form.
+- to work with sourcecode, we need to convert it to accessable format
 - we need to represent our sourcecode in a form that is easier to work with,
   we are going to change the representation of our source code two times before we evaluate it
 
