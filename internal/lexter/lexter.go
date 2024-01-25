@@ -47,6 +47,8 @@ func (l *Lexer) NextToken() token.Token {
 	// `==`, `!=`
 	case '=':
 		if l.PeekChar() == '=' {
+			// we basically assign the current char in to variable
+			// and we read the next possition to build the token type
 			ch := l.ch
 			l.readChar()
 			literal := string(ch) + string(l.ch)
