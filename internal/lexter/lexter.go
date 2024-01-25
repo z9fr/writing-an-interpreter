@@ -43,8 +43,26 @@ func (l *Lexer) NextToken() token.Token {
 	l.skipWhitespace()
 
 	switch l.ch {
+	// we are going to extend `=` and `!` to support operations like
+	// `==`, `!=`
 	case '=':
-		t = NewToken(token.ASSIGN, l.ch)
+		if l.PeekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			literal := string(ch) + string(l.ch)
+			t = token.Token{Type: token.EQ, Literal: literal}
+		} else {
+			t = NewToken(token.ASSIGN, l.ch)
+		}
+	case '!':
+		if l.PeekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			literal := string(ch) + string(l.ch)
+			t = token.Token{Type: token.NOT_EQ, Literal: literal}
+		} else {
+			t = NewToken(token.BANG, l.ch)
+		}
 	case ';':
 		t = NewToken(token.SEMICOLON, l.ch)
 	case '(':
@@ -57,8 +75,6 @@ func (l *Lexer) NextToken() token.Token {
 		t = NewToken(token.PLUS, l.ch)
 	case '-':
 		t = NewToken(token.MINUS, l.ch)
-	case '!':
-		t = NewToken(token.BANG, l.ch)
 	case '*':
 		t = NewToken(token.ASTERISK, l.ch)
 	case '/':
@@ -129,4 +145,13 @@ func (l *Lexer) readNumber() string {
 		l.readChar()
 	}
 	return l.input[position:l.position]
+}
+
+// peek char is same as readChar but it doesnt increment the current possition
+func (l *Lexer) PeekChar() byte {
+	if l.readPosition >= len(l.input) {
+		return 0
+	} else {
+		return l.input[l.readPosition]
+	}
 }
