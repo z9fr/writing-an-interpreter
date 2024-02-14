@@ -102,6 +102,11 @@ let add = fn(a, b) {
 };
 ```
 
+
+> what does it mean to parse let statement correctly ?
+> - parser produce an AST that accurately represents the information in orignial let statement
+
+
 above is a sample code written in monkey. here we can see 3 statements
 ```bash
 let <identifier> = <expression>;
@@ -110,3 +115,43 @@ let statements in this language has two changing parts: identifier and an expres
 
 - identifier: `x`,`y` and `add`
 - expressions: `10`,`15` and `function literal`
+
+
+Difference between statements and expression
+====
+
+- expressions produce values
+- statements dont produce values. 
+
+
+---
+
+```go
+// ast/ast.go
+
+package ast
+
+type Node interface {
+    TokenLiteral() string
+}
+
+type Statement interface {
+    Node
+    statementNode()
+}
+
+type Expression interface {
+    Node
+    expressionNode()
+}
+```
+
+- we need two different types of nodes: expression and statements.
+
+
+> we have 3 interfaces called `Node`, `Statement` and `Expression`. every node in our
+  AST has to implment the `Node` interface.
+
+> it has to provide a `TokenLiteral()` method that returns the literal value of
+  token its associated with. ( used for debugging and testing)
+
