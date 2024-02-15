@@ -165,4 +165,34 @@ it's a tree after all.
 
 ---
 
+## Parsing let statements
+
+```go
+func (p *Parser) parseLetStatement() *ast.LetStatement {
+	stmt := &ast.LetStatement{Token: p.curToken}
+
+	if !p.expectPeek(token.IDENT) {
+		return nil
+	}
+
+	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+
+	if !p.expectPeek(token.ASSIGN) {
+		return nil
+	}
+
+	// TODO: We're skipping the expressions until we
+	// encounter a semicolon
+	for !p.curTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+
+	return stmt
+}
+```
+
+- We can star with `parseLetStatement` methord. it creates an `*ast.LetStatement` with the token it sitting on `token.LET`.
+- Then it advances the tokens while making assertions about the next token. using the calls to `expectPeek`
+- First expect the `token.IDENT` token. which then it uses to construct an `*ast.Identifier` node
+- Then expects an equal sign and finally jumps over the expression following the equal sign untill encounters a semicolon
 
