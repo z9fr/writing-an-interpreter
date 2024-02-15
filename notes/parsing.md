@@ -196,3 +196,37 @@ func (p *Parser) parseLetStatement() *ast.LetStatement {
 - First expect the `token.IDENT` token. which then it uses to construct an `*ast.Identifier` node
 - Then expects an equal sign and finally jumps over the expression following the equal sign untill encounters a semicolon
 
+
+## Parsing Return Statements
+
+- first we need to define necessary structure in the ast package.
+
+
+example return statements in monkey:
+
+```js
+return 5;
+return 10;
+return add(10);
+```
+
+the structure will be
+
+```bash
+return <expresssion>;
+```
+
+return statements consist of keyword `return` and a expression. this makes definition of 
+`ast.ReturnStatement` really simple 
+
+```go
+type ReturnStatement struct {
+	Token       token.Token // the `return` token
+	ReturnValue Expression
+}
+
+func (rs *ReturnStatement) statementNode()       {}
+func (rs *ReturnStatement) TokenLiteral() string { return rs.Token.Literal }
+```
+
+
