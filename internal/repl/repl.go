@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"monkey-lang.z9fr.xyz/internal/lexter"
+	"monkey-lang.z9fr.xyz/internal/lexer"
 	"monkey-lang.z9fr.xyz/internal/token"
 )
 
@@ -23,7 +23,7 @@ func Start(in io.Reader, out io.Writer) {
 		}
 
 		line := scanner.Text()
-		l := lexter.New(line)
+		l := lexer.New(line)
 
 		for tok := l.NextToken(); tok.Type != token.EOF; tok = l.NextToken() {
 			fmt.Fprintf(out, "%+v\n", tok)

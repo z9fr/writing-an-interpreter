@@ -1,4 +1,4 @@
-package lexter
+package lexer
 
 import (
 	"monkey-lang.z9fr.xyz/internal/token"

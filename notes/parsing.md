@@ -155,3 +155,14 @@ type Expression interface {
 > it has to provide a `TokenLiteral()` method that returns the literal value of
   token its associated with. ( used for debugging and testing)
 
+
+- The AST we construct will consists solely of Nodes that are connected to each other. 
+it's a tree after all.
+- Some will implement `Statement` and some will impl  `Expression` interfaces
+  - These interfaces only has dummy methords called `statementNode` and `expressionNode`
+  - These methords are not necessary  but help to compiler.
+  - Can use to throw errors when use a `Statement` where `Expression` should use or vise versa
+
+---
+
+
