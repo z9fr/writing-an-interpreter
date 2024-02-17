@@ -298,3 +298,58 @@ if we take `-5` for example, first it will create `*ast.PrefixExpression` and th
 and call parseExpression for the next token which will then create `*ast.IntegerLiteral`
 
 when calling `parseExpression` we do parse precedence as `PREFIX`
+
+----
+
+# Infix Operators
+
+Next up we’re going to parse these eight infix operators:
+```js
+5 + 5;
+5 - 5;
+5 * 5;
+5 / 5;
+5 > 5;
+5 < 5;
+5 == 5;
+5 != 5;
+```
+
+its not just this 5 we can use any expressions to the left and right of the operator
+
+`<expression> <infix operator> <expression`
+
+> Because of the two operands (left and right) these expressions are sometimes called "binary expressions"
+
+---
+
+# How Pratt Parsing Works
+
+The algorithm behind the `parseExpression` methord and its combination of parsing functions
+and precedences is fully described by Vaughan Pratt in his "Top Down Operator Precedence" paper.
+
+> Pratt doesn’t use a Parser structure and doesn’t pass around methods defined on *Parser. 
+He also doesn’t use maps and, of course, he didn’t use Go. 
+His paper predates the release of Go by 36 years. And then there are naming differences: 
+what we call prefixParseFns are "nuds" (for "null denotations") for Pratt. 
+`infixParseFns` are "leds" (for "left denotations").
+
+### How does this work?
+
+lets say we want to parse below expression statement :
+```js
+1 + 2 + 3;
+```
+what we want here is an `AST` that (serialized as a string) looks like below
+```js
+((1 + 2) + 3)
+```
+the AST needs to have two `*ast.InfixExpression` nodes. The `*ast.InfixExpression`
+higher in the tree should have int `3` as the `Right` child node. 
+
+the `Left` child node needs to be other `*ast.InfixExpression`. second node needs to have the
+int `1` and `2` as its `Left` and `Right` child nodes. 
+
+[![Ast view](./images/ast-expression-view.png)]
+
+this is exactly what our parser outputs when it parses `1 + 2 + 3`.
