@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"strconv"
 
 	"monkey-lang.z9fr.xyz/internal/ast"
 	"monkey-lang.z9fr.xyz/internal/lexer"
@@ -51,8 +52,45 @@ func New(l *lexer.Lexer) *Parser {
 	// is `parseIdentifier` a methord defined in `Parser`
 	p.prefixParseFns = make(map[token.TokenType]prefixParseFn)
 	p.registerPrefix(token.IDENT, p.parseIdentifier)
+	p.registerPrefix(token.INT, p.parseIntegerLiteral)
+
+	p.registerPrefix(token.BANG, p.parsePrefixExpression)
+	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
 
 	return p
+}
+
+func (p *Parser) parsePrefixExpression() ast.Expression {
+	// builds an `AST` node, in this case `*ast.PrefixExpression`. but then it advances
+	// our tokens by calling `p.nextToken()`
+	//
+	// when `parsePrefixExpression` is called, `p.curToken` is either of type token.BANG or token.MINUS
+	// to parse the prefix expression like `-5` more than one token has to be "consumed",
+	// so after using `p.curToken` to build a *ast.PrefixExpression node, then the methord
+	// advances the tokens and call `p.parseExpression(PREFIX)` again. this time with
+	// precedence of PREFIX
+	expression := &ast.PrefixExpression{
+		Token:    p.curToken,
+		Operator: p.curToken.Literal,
+	}
+
+	p.nextToken()
+	expression.Right = p.parseExpression(PREFIX)
+	return expression
+}
+
+func (p *Parser) parseIntegerLiteral() ast.Expression {
+	lit := &ast.IntegerLiteral{Token: p.curToken}
+	value, err := strconv.ParseInt(p.curToken.Literal, 0, 64)
+
+	if err != nil {
+		msg := fmt.Sprintf("could not parse %q as integer", p.curToken.Literal)
+		p.errors = append(p.errors, msg)
+		return nil
+	}
+
+	lit.Value = value
+	return lit
 }
 
 func (p *Parser) parseIdentifier() ast.Expression {
@@ -121,7 +159,7 @@ func (p *Parser) parseStatement() ast.Statement {
 func (p *Parser) parseExpressionStatement() *ast.ExpressionStatement {
 	stmt := &ast.ExpressionStatement{Token: p.curToken}
 
-	stmt.Expression = *p.parseExpression(LOWEST)
+	stmt.Expression = p.parseExpression(LOWEST)
 
 	if p.peekTokenIs(token.SEMICOLON) {
 		p.nextToken()
@@ -130,18 +168,24 @@ func (p *Parser) parseExpressionStatement() *ast.ExpressionStatement {
 	return stmt
 }
 
-func (p *Parser) parseExpression(precedence int) *ast.Expression {
+func (p *Parser) noPrefixParseFnError(t token.TokenType) {
+	msg := fmt.Sprintf("no prefix parse function for %s found", t)
+	p.errors = append(p.errors, msg)
+}
+
+func (p *Parser) parseExpression(precedence int) ast.Expression {
 	// take the register prefix parser functions we register then when `New()`
 	// is called and we call that parser function
 	prefix := p.prefixParseFns[p.curToken.Type]
 
 	if prefix == nil {
+		p.noPrefixParseFnError(p.curToken.Type)
 		return nil
 	}
 
 	leftExp := prefix()
 
-	return &leftExp
+	return leftExp
 }
 
 func (p *Parser) parseLetStatement() *ast.LetStatement {

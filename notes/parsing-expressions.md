@@ -165,3 +165,136 @@ type (
     infixParseFn  func(ast.Expression) ast.Expression
 )
 ```
+
+## Integer Literals
+
+first we have to implment the `parseIntegerLiteral` methord
+
+```go
+func (p *Parser) parseIntegerLiteral() ast.Expression {
+	lit := &ast.IntegerLiteral{Token: p.curToken}
+	value, err := strconv.ParseInt(p.curToken.Literal, 0, 64)
+
+	if err != nil {
+		msg := fmt.Sprintf("could not parse %q as integer", p.curToken.Literal)
+		p.errors = append(p.errors, msg)
+		return nil
+	}
+
+	lit.Value = value
+	return lit
+}
+```
+
+this func takes the responsibility to parse the integer value. then we can register this parser
+in our `Parser`
+
+```go
+func New(l *lexer.Lexer) *Parser {
+	p := &Parser{
+		l:      l,
+		errors: []string{},
+	}
+
+	// Read two tokens, so curToken and peekToken are both set
+	p.nextToken()
+	p.nextToken()
+
+	// `New() func initiate the `prefixParseFns` map on `Parser`
+	// and register a parsing function;
+	// if we enconter a token type of `token.IDENT` the parsing function to call
+	// is `parseIdentifier` a methord defined in `Parser`
+	p.prefixParseFns = make(map[token.TokenType]prefixParseFn)
+	p.registerPrefix(token.IDENT, p.parseIdentifier)
+	p.registerPrefix(token.INT, p.parseIntegerLiteral)
+
+	return p
+}
+```
+
+in our `parseExpression` methord we basically get this prefixparser in this case it will be 
+`parseIntegerLiteral` and we use it to parse the statement
+```go
+func (p *Parser) parseExpression(precedence int) *ast.Expression {
+	// take the register prefix parser functions we register then when `New()`
+	// is called and we call that parser function
+	prefix := p.prefixParseFns[p.curToken.Type]
+
+	if prefix == nil {
+		return nil
+	}
+
+	leftExp := prefix()
+
+	return &leftExp
+}
+```
+---
+
+# Prefix Operators
+
+there are two prefix operatos in our lang. `!` and `-`. their usage is pretty much the same
+with other langauges
+
+```js
+-5;
+!foobar;
+5 + -10
+```
+the usage is same as other languages
+
+```<prefix operator> <expression>;```
+
+any expression can follow a prefix as operand. for example:
+```js
+!isGreaterThanZero(2);
+5 + -add(5, 5);
+```
+that means that `AST` node for a prefix operator has to be flexible enough to point any expression
+as its operand.
+
+
+The register events are below
+
+```go
+func New(l *lexer.Lexer) *Parser {
+    // ...
+	p.prefixParseFns = make(map[token.TokenType]prefixParseFn)
+	p.registerPrefix(token.BANG, p.parsePrefixExpression)
+	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
+
+    // ...
+}
+```
+
+as you can see for the token types `token.BANG` and `token.MINUS` we do call the `parsePrefixExpression`
+below is the impl for the `parsePrefixExpression`
+
+```go
+func (p *Parser) parsePrefixExpression() ast.Expression {
+	// builds an `AST` node, in this case `*ast.PrefixExpression`. but then it advances
+	// our tokens by calling `p.nextToken()`
+	//
+	// when `parsePrefixExpression` is called, `p.curToken` is either of type token.BANG or token.MINUS
+	// to parse the prefix expression like `-5` more than one token has to be "consumed",
+	// so after using `p.curToken` to build a *ast.PrefixExpression node, then the methord
+	// advances the tokens and call `p.parseExpression(PREFIX)` again. this time with
+	// precedence of PREFIX
+	expression := &ast.PrefixExpression{
+		Token:    p.curToken,
+		Operator: p.curToken.Literal,
+	}
+
+	p.nextToken()
+	expression.Right = p.parseExpression(PREFIX)
+	return expression
+}
+```
+
+as you can see here we basically builds `AST` node in this case  `*ast.PrefixExpression`. but
+then we advance our tokens by calling `p.nextToken()`
+
+if we take `-5` for example, first it will create `*ast.PrefixExpression` and then it advance
+and call parseExpression for the next token which will then create `*ast.IntegerLiteral`
+
+when calling `parseExpression` we do parse precedence as `PREFIX`
