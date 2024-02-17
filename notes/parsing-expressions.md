@@ -147,3 +147,21 @@ eg : `5 + 5 * 10`
 > These are all basic terms: prefix, postfix, infix operator and precedence. 
 But it’s important that we keep these simple definitions in mind later on,
 where we’ll use these terms in other places.
+
+
+# Implementing the Pratt Parser
+
+Pratt parsers main idea is the association of parsing functions (semantic code) with token types.
+Whenever this token type is encountered, the parsing functions are called to parse the
+appropriate expression and return `AST` node represents it. Each token type can have up to two
+parsing functions associated with it.  depending on whether the token is found
+in a prefix or an infix possition.
+
+```go
+// parser/parser.go
+
+type (
+    prefixParseFn func() ast.Expression
+    infixParseFn  func(ast.Expression) ast.Expression
+)
+```
