@@ -350,6 +350,6 @@ higher in the tree should have int `3` as the `Right` child node.
 the `Left` child node needs to be other `*ast.InfixExpression`. second node needs to have the
 int `1` and `2` as its `Left` and `Right` child nodes. 
 
-[![Ast view](./images/ast-expression-view.png)]
+![Ast view](./images/ast-expression-view.png)
 
 this is exactly what our parser outputs when it parses `1 + 2 + 3`.
