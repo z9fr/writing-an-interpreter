@@ -2,7 +2,7 @@
 
 ## Lexical Analysis
 
-- in order to work with sourcecode, we need to convert it to more accessable form.
+- to work with sourcecode, we need to convert it to accessable format
 - we need to represent our sourcecode in a form that is easier to work with,
   we are going to change the representation of our source code two times before we evaluate it
 
@@ -55,11 +55,11 @@ let add = fn(x, y) {
 let result = add(five, ten);
 ```
 
-Let’s break this down: which types of tokens does this example contain? First of all, there are
-the numbers like 5 and 10. These are pretty obvious. Then we have the variable names x, y,
-add and result. And then there are also these parts of the language that are not numbers, just
-words, but no variable names either, like let and fn. Of course, there are also a lot of special
-characters: (, ), {, }, =, ,, ;.
+Break down;
+
+above example has numbers like 5 and 10. we also have variables x, y and result also 
+we have keywords like fn  and special characters: (, ), {, }, =, ,, ;.
+
 
 - numbers are just int and we are going to treat them as such
 - we call the variable names "identifiers"
