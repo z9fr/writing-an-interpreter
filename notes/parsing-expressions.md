@@ -495,3 +495,40 @@ The operators and operands are nested correctly
 Now condition eval to `false`. the `p.peekTokenIs(tokenSEMICOLON)` eval to true.
 
 
+----
+
+Grouped Expressions
+-------------------
+
+> Group expression with parentheses can be used to influence precedence. 
+```js
+(5 + 5) * 2;
+```
+the parentheses group `(5 + 5)` has a higher precedence. 
+
+the impl is relatively simple. 
+
+```go
+// parser/parser.go
+
+func New(l *lexer.Lexer) *Parser {
+// [...]
+    p.registerPrefix(token.LPAREN, p.parseGroupedExpression)
+// [...]
+}
+
+func (p *Parser) parseGroupedExpression() ast.Expression {
+    p.nextToken()
+
+    exp := p.parseExpression(LOWEST)
+
+    if !p.expectPeek(token.RPAREN) {
+        return nil
+    }
+
+    return exp
+}
+```
+> The concept of associating token types with functions really shines here. 
+That’s all there is to it. There is nothing happening here that we haven’t seen before.
+
