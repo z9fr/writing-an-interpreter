@@ -353,3 +353,145 @@ int `1` and `2` as its `Left` and `Right` child nodes.
 ![Ast view](./images/ast-expression-view.png)
 
 this is exactly what our parser outputs when it parses `1 + 2 + 3`.
+
+----
+
+### How our parse handles this?
+
+`parseExpressionStatement` calls `parseExpression(LOWEST)`. The `p.curToken` and `p.peekToken`
+are the 1 and the first +:
+
+![peek and cur tokens image](./images/peek-and-curtoken.png)
+
+
+`parseExpression` checks if there is a `prefixParseFn` associated with current `p.curToken.Type`
+in this case its a `token.INT` which has the `parseIntegerLiteral` so it calls this. 
+
+↓
+
+This will return `*ast.IntegerLiteral.parseExpression`  assigns this to `leftExp`
+
+↓
+
+then the `for-loop` in `parseExpression` it evals to `true`
+
+```go
+func (p *Parser) parseExpression(precedence int) ast.Expression {
+	prefix := p.prefixParseFns[p.curToken.Type]
+
+	if prefix == nil {
+		p.noPrefixParseFnError(p.curToken.Type)
+		return nil
+	}
+
+	leftExp := prefix()
+
+	for !p.peekTokenIs(token.SEMICOLON) && precedence < p.peekPrecedence() {
+		// [...]
+	}
+
+	return leftExp
+}
+```
+
+`p.peekToken` is not a `token.SEMICOLON` and `peekPrecedence` (precedence of +) is higher than
+the argument parsed in `parseExpression` (in this case `LOWEST`)
+```go
+const (
+	_ int = iota
+	LOWEST
+	EQUALS      // ==
+	LESSGREATER // > or <
+	SUM         // +
+	PRODUCT     // *
+	PREFIX      // -X or !X
+	CALL        // myFunction(X)”
+)
+```
+↓
+
+so condition eval to `true` and `parseExpression` exec the body of loop
+```go
+infix := p.infixParseFns[p.peekToken.Type]
+if infix == nil {
+	return leftExp
+}
+
+p.nextToken()
+leftExp = infix(leftExp)
+```
+now it fetch the `infixParseFns` for `p.peekToken.Type`. which is `parseInfixExpression`
+defined on `*Parser`. Before calling it and assigning its return value to the `leftExp`
+it advance the tokens so they now looks like below
+
+![after advance the view](./images/ast-expression-after-advance-to-next-token.png)
+
+with the tokens in this state it cjalls `parseInfixExpression` and passes in the already
+parsed `*ast.IntegerLiteral` (assigned to leftExp outside the for-loop)
+
+```go
+func (p *Parser) parseInfixExpression(left ast.Expression) ast.Expression {
+   expression := &ast.InfixExpression{
+        Token:    p.curToken,
+        Operator: p.curToken.Literal,
+        Left:     left,
+    }
+
+    precedence := p.curPrecedence()
+    p.nextToken()
+    expression.Right = p.parseExpression(precedence)
+
+    return expression
+}
+```
+It's important to note that left is our already parsed `*ast.IntegerLiteral` that represents the 1
+
+`parseInfixExpression` saves the precedence of `p.curToken`, then it calls `parseExpression`
+for the second time and tokens look like below
+
+![Tokens view](./images/second-time-parse-view.png)
+
+↓
+
+then `parseExpression` looks for `prefixParseFn` for `p.curToken` which is `parseIntegerLiteral`
+But now the condition does not eval to `true`
+
+precedence of *first* + operator in `1 + 2 + 3` which is *not* smaller than the precedence of 
+`p.peekToken`, the second + operator. they are equal
+
+The body of the for-loop is not executed and the `*ast.IntegerLiteral` representing the 2 is returned
+
+> now back in `parseInfixExpression`. the return-value of `parseExpression` is assigned to `Right`
+
+![Looks like this](./images/return-val-of-parseexpression-to-right.png)
+
+
+This `*ast.InfixExpression` gets returned by `parseInfixExpression`. we are at outer-most call to
+`parseExpression`. the precedence is still `LOWEST`. 
+
+the condition of the for-loop will eval again
+```go
+for !p.peekTokenIs(token.SEMICOLON) && precedence < p.peekPrecedence() {
+// [...]
+}
+```
+since precedence is lowest `peekPrecedence` returns the precedence of second `+`. 
+the `leftExp` is now representing `1` the `*ast.InfixExpression` returned by `parseInfixExpression`
+this represents `1 + 2`
+
+in the loop `parseExpression` fetch for `parseInfixExpression` as the `infixParseFn` for 
+`p.peekToken.Type` which is second `+`
+
+which returns the last `*ast.IntegerLiteral`
+
+![end of loop body](./images/end-of-loopbody.png)
+
+The operators and operands are nested correctly
+
+![our tokens looks like this](./images/end-token-view.png)
+
+↓
+
+Now condition eval to `false`. the `p.peekTokenIs(tokenSEMICOLON)` eval to true.
+
+
