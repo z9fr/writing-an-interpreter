@@ -44,23 +44,18 @@ Example:
 
 1. Ruby is a great example here. Up to and including version 1.8 the interpreter was a tree-walking interpreter,
 executing the AST while traversing it. 
-
 But with version 1.9 came the switch to a virtual machine architecture. 
-
 Now the Ruby interpreter parses source code, builds an AST and then compiles this AST into bytecode, 
 which gets then executed in a virtual machine. The increase in performance was huge.
 
 2. The WebKit JavaScript engine JavaScriptCore and its interpreter named `Squirrelfish`
 also used AST walking and direct execution as its approach. 
-
 Then in 2008 came the switch to a virtual machine and bytecode interpretation. 
-
 Nowadays the engine has four (!) different stages of JIT compilation, which kick in at different times 
 in the lifetime of the interpreted program depending on which part of the program needs the best performance.
 
 3. Another example is Lua. The main implementation of the Lua started out as an interpreter that compiles 
 to bytecode and executes the bytecode in a register-based virtual machine. 
-
 12 years after its first release another implementation of the language was born: LuaJIT. 
 The clear goal of Mike Pall, the creator of LuaJIT, was to create the fastest Lua implementation possible.
 And he did. By JIT compiling a dense bytecode format to highly-optimized machine code for
