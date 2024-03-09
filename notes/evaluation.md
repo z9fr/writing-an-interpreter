@@ -489,3 +489,442 @@ To be able to handle this when evaluating block statement we check for the `resu
 
 Note that we dont unwrap the value because when evalProgram is getting executed the value will 
 get unwrapped
+
+---
+
+# Bindings & The Environment
+
+we need to add support to `let` statements. not only we need to support let statements 
+we need to support evaludation of identifiers, too
+
+```js
+let x = 5 * 5;
+```
+we need to make sure that x evaluates to 25 after interpreting the line above.
+
+> So we are going to evaludate let statements and identifiers. we evaludate
+let statements by evaluating their value-producing expression and keep track
+of the produces value under the specified name.
+
+> to eval identifies we check if we already have a value bound to the name.
+if we do, the identifies eval to this value, and if we don't we return an error
+
+
+```go
+case *ast.LetStatement:
+	val := Eval(node.Value)
+	if isError(val) {
+		return val
+	}
+	// how do we keep track on this val here ?
+```
+
+As the comment mentions. now what we evaludate the value of the node. but how do we
+keep track of the value here?
+
+This is where environment comes to play. 
+
+> Environment is what we use to keep track of value by associating them with a name. 
+
+The name "Environment" is a classic one, used in lot of other interpreters,
+especially Lispy ones. but eventho the name might sound involving, at it's heart
+the environment is a hash map that associates strings with objects. 
+
+and that's exactly what we're goingh to use for our implementation
+
+```go
+// object/environment.go
+package object
+
+type Environment struct {
+	store map[string]Object
+}
+
+func NewEnvironment() *Environment {
+	s := make(map[string]Object)
+	return &Environment{store: s}
+}
+
+func (e *Environment) Get(name string) (Object, bool) {
+	obj, ok := e.store[name]
+	return obj, ok
+}
+
+func (e *Environment) Set(name string, val Object) Object {
+	e.store[name] = val
+	return val
+}
+```
+we are going to change our function definition of our eval to pass the env as well
+
+```go
+// evaluator/evaluator.go
+
+func Eval(node ast.Node, env *object.Environment) object.Object {
+// [...]
+```
+
+we can initiate this in our repl
+
+```go
+// repl/repl.go
+
+import (
+    // [...]
+    "monkey/object"
+)
+
+func Start(in io.Reader, out io.Writer) {
+    scanner := bufio.NewScanner(in)
+    env := object.NewEnvironment()
+
+    for {
+// [...]
+        evaluated := evaluator.Eval(program, env)
+        if evaluated != nil {
+            io.WriteString(out, evaluated.Inspect())
+            io.WriteString(out, "\n")
+        }
+    }
+}
+
+// evaluator/evaluator_test.go
+
+func testEval(input string) object.Object {
+    l := lexer.New(input)
+    p := parser.New(l)
+    program := p.ParseProgram()
+    env := object.NewEnvironment()
+
+    return Eval(program, env)
+}
+```
+
+to memorize the values of the variables we can set the result after eval to the env 
+
+```go
+// evaluator/evaluator.go
+
+func Eval(node ast.Node, env *object.Environment) object.Object {
+// [...]
+    case *ast.LetStatement:
+        val := Eval(node.Value, env)
+        if isError(val) {
+            return val
+        }
+        env.Set(node.Name.Value, val)
+// [...]
+```
+when adding associations to the env let statements we also need to get those values 
+to that. we are going to implement evalIdentifier doing this is pretty easy
+
+```go
+// evaluator/evaluator.go
+
+func Eval(node ast.Node, env *object.Environment) object.Object {
+// [...]
+    case *ast.Identifier:
+        return evalIdentifier(node, env)
+// [...]
+}
+
+func evalIdentifier(
+    node *ast.Identifier,
+    env *object.Environment,
+) object.Object {
+    val, ok := env.Get(node.Value)
+    if !ok {
+        return newError("identifier not found: " + node.Value)
+    }
+    // for now `evalIdentifier` simply check if the value availible if so
+    // return the value or throw an error
+    return val
+}
+```
+now the variables work as expected
+```js
+Hello dasith, This is Monkey programming language!
+Feel free to type in commands
+>> let a = 5;
+>> let b = 10;
+>> a + b;
+15
+>> xyx
+ERROR: identifier not found: xyx
+>>
+```
+---
+
+# Functions & Function Calls
+
+```go
+// object/object.go
+type Function struct {
+	Parameters []*ast.Identifier
+	Body       *ast.BlockStatement
+	Env        *Environment
+}
+
+func (f *Function) Type() ObjectType { return FUNCTION_OBJ }
+func (f *Function) Inspect() string {
+	var out bytes.Buffer
+
+	params := []string{}
+	for _, p := range f.Parameters {
+		params = append(params, p.String())
+	}
+
+	out.WriteString("fn")
+	out.WriteString("(")
+	out.WriteString(strings.Join(params, ", "))
+	out.WriteString(") {\n")
+	out.WriteString(f.Body.String())
+	out.WriteString("\n}")
+
+	return out.String()
+}
+```
+
+The definition of `object.Function` has the `Parameters` and `Body` fields. But it also 
+has a `Env`. this holds a pointer to a `object.Environment` because functions in Monkey
+carry their own environment with them. This allows for closures, which "close over"
+the environment the're defined and can later access it.
+
+
+```go
+// evaluator/evaluator.go
+
+func Eval(node ast.Node, env *object.Environment) object.Object {
+// [...]
+    case *ast.FunctionLiteral:
+        params := node.Parameters
+        body := node.Body
+        return &object.Function{Parameters: params, Env: env, Body: body}
+// [...]
+```
+we can build the internal representation of funcions this way.
+
+### Implementation of function appication.
+
+the below are the test cases we are trying to implement
+
+```go 
+// evaluator/evaluator_test.go
+
+func TestFunctionApplication(t *testing.T) {
+    tests := []struct {
+        input    string
+        expected int64
+    }{
+        {"let identity = fn(x) { x; }; identity(5);", 5},
+        {"let identity = fn(x) { return x; }; identity(5);", 5},
+        {"let double = fn(x) { x * 2; }; double(5);", 10},
+        {"let add = fn(x, y) { x + y; }; add(5, 5);", 10},
+        {"let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));", 20},
+        {"fn(x) { x; }(5)", 5},
+    }
+
+    for _, tt := range tests {
+        testIntegerObject(t, testEval(tt.input), tt.expected)
+    }
+}
+```
+each test here does thesame thing, define function, apply it to args and then make an 
+assertion about value.
+
+> We are also testing two possible forms of *ast.CallExpression here. 
+One where the function is an identifier that evaluates to a function object, 
+and the second one where the function is a function literal. 
+
+The neat thing is that it doesn’t really matter. 
+We already know how to evaluate identifiers and function literals:
+
+```go
+// evaluator/evaluator.go
+
+func Eval(node ast.Node, env *object.Environment) object.Object {
+// [...]
+    case *ast.CallExpression:
+        function := Eval(node.Function, env)
+        if isError(function) {
+            return function
+        }
+// [...]
+}
+```
+we are just using eval to get function we want to call. whether that's a
+`ast.Identifier` or an `*ast.FunctionLiteral`: Eval returns `*object.Function`
+
+But how do we call this `*object.Function`? 
+
+first we want to eval the ags of a call expression
+
+```js
+let add = fn(x, y) { x + y };
+add(2 + 2, 5 + 5);
+```
+
+
+```go
+	case *ast.CallExpression:
+		// we are just using eval to get function we want to call. whether that's a
+		// `ast.Identifier` or an `*ast.FunctionLiteral`
+		// Eval returns `*object.Function`
+		function := Eval(node.Function, env)
+		if isError(function) {
+			return function
+		}
+		args := evalExpression(node.Arguments, env)
+		if len(args) == 1 && isError(args[0]) {
+			return args[0]
+		}
+	}
+	return nil
+}
+
+func evalExpression(exps []ast.Expression, env *object.Environment) []object.Object {
+	var result []object.Object
+
+	for _, e := range exps {
+		evaluated := Eval(e, env)
+		if isError(evaluated) {
+			return []object.Object{evaluated}
+		}
+		result = append(result, evaluated)
+	}
+
+	return result
+}
+```
+
+we can handle this like this, we just iterate over a list of `ast.Expressions` and eval them in
+context of current env. if we have an error we return error.
+
+Here we eval the args from left-to-right. Hopefully we wont be writing monkey code 
+that makes assertions about the order of argument eval. 
+
+but if we do, we’re on the conservative and safe side of programming language design.
+
+### Now how do we call the function? 
+
+we have to eval our function body. but we have to consider arguments. 
+
+The body of the function contains references to the params of the function and just 
+eval the body of function in the current env would result in unknown references. 
+
+- we need to change the env which the function is evaluated. so references to params in
+function body resolve to correct args. 
+
+- but we can't just add these args to current env. this can lead to previous bindings being 
+over-written. 
+
+```js
+let i = 5;
+let printNum = fn(i) {
+  puts(i); // 10
+};
+
+printNum(10);
+puts(i); // 5
+```
+if we over-write the current env the last line will also be 10. 
+
+> So adding args to function call to current env to make them accessable wont work. 
+what we need is preserve previous bindings while at the same time make new ones availible
+
+#### Extending the environment
+
+Extending the env means we create new instance of `object.Environment` with pointer to env 
+it should extend. 
+
+When new env `Get` methord is called and doesnt have a value associated with the given name.
+it call the `Get` of the enclosing env. that's the env it's extending. 
+
+if that enclosing env cant't find the value, it calls its own enclosing env and so untill 
+there is  no encolsing env anymore and we can safely say we have an `ERROR: unknown identifier: foobar`
+```go
+func NewEnclosedEnvironment(outer *Environment) *Environment {
+	env := NewEnvironment()
+	env.outer = outer
+	return env
+}
+
+type Environment struct {
+	store map[string]Object
+	// we are adding a new field called `outer` this contains a reference to another
+	// `object.Environment` which is the enclosing env, the only one its extending
+	outer *Environment
+}
+```
+we have to change the `Get` implementation to check the enclosing environment for given name too
+
+```go
+func (e *Environment) Get(name string) (Object, bool) {
+	obj, ok := e.store[name]
+
+	if !ok && e.outer != nil {
+		obj, ok = e.outer.Get(name)
+	}
+
+	return obj, ok
+}
+```
+
+> This new behaviour mirrors how we think about variable scopes. There are an inner scope
+and outer scope.  if value not found in inner scope, its looked up in outer scope. 
+this outer scope *encloses* inner scope. and the inner scope *extends* the outer one
+
+---
+
+## Closures
+
+The reason why we extend the function environment and not the current env is because closures
+
+```go
+func TestClosures(t *testing.T) {
+	input := `
+let newAdder = fn(x) {
+  fn(y) { x + y };
+};
+
+let addTwo = newAdder(2);
+addTwo(2);`
+
+	testIntegerObject(t, testEval(input), 4)
+}
+```
+
+```
+Hello dasith, This is Monkey programming language!
+Feel free to type in commands
+>> let newAdder = fn(x) { fn(y) { x + y }; };
+>> let addTwo = newAdder(2);
+>> addTwo(3);
+5
+>> let addThree = newAdder(3);
+>> addThree(10);
+13
+>>
+```
+
+Closures are functions that "close over" the env they were defined in. they have their own
+env around and wheneve they're called they can access it.
+
+```js
+let newAdder = fn(x) { fn(y) { x + y }; };
+let addTwo = newAdder(2);
+```
+`newAdder` here is a higher-order function. Higher order functions are functions either return
+other functions or receive them as args. in this case `newAdder` returns another function. a closure.
+
+`addTwo` is bound to the closure that's returned when calling newAdder with 2 as the sole arg
+
+when `addTwo` is called it not only has access to arg of the call, (y) it also has
+access to the value `x` which was bound at the time of the `newAdder(2)` call
+
+> the closure `addTwo` still has acces sto env that was the current env at the time its definition.
+which is when the last time of `newAdder` body was evaludated. this is a funcion literal 
+remeber we build an `object.Function` and keep the reference to the current env in it's `.Env` field.
+
+
+
