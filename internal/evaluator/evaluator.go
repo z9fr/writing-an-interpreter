@@ -1,6 +1,8 @@
 package evaluator
 
 import (
+	"fmt"
+
 	"monkey-lang.z9fr.xyz/internal/ast"
 	"monkey-lang.z9fr.xyz/internal/object"
 )
@@ -25,10 +27,19 @@ func Eval(node ast.Node) object.Object {
 		return nativeBoolToBooleanObject(node.Value)
 	case *ast.PrefixExpression:
 		right := Eval(node.Right)
+		if isError(right) {
+			return right
+		}
 		return evalPrefixExpression(node.Operator, right)
 	case *ast.InfixExpression:
 		left := Eval(node.Left)
+		if isError(left) {
+			return left
+		}
 		right := Eval(node.Right)
+		if isError(right) {
+			return right
+		}
 		return evalInfixExpression(node.Operator, left, right)
 	case *ast.BlockStatement:
 		return evalBlockStatement(node)
@@ -40,6 +51,9 @@ func Eval(node ast.Node) object.Object {
 		// wrap the result of this call to `Eval` in our new `object.ReturnValue` so we can
 		// keep track on this
 		val := Eval(node.ReturnValue)
+		if isError(val) {
+			return val
+		}
 		return &object.ReturnValue{Value: val}
 	}
 	return nil
@@ -50,11 +64,16 @@ func evalProgram(stmts []ast.Statement) object.Object {
 
 	for _, statement := range stmts {
 		result = Eval(statement)
+
 		// in case the last eval result is a `object.ReturnValue` if so we stop the
 		// evaluation and return the unwrapped value. we dont need to return an `object.ReturlValue`
 		// but only the value its wrapping which is what the user expected.
-		if returnValue, ok := result.(*object.ReturnValue); ok {
-			return returnValue.Value
+
+		switch result := result.(type) {
+		case *object.ReturnValue:
+			return result.Value
+		case *object.Error:
+			return result
 		}
 	}
 
@@ -75,8 +94,12 @@ func evalBlockStatement(block *ast.BlockStatement) object.Object {
 		// of each evaluation result, if it's `object.RETURN_VALUE_OBJ`
 		// we return the value. without unwrapping it's `.Value` so it stops the execution
 		// in a possible outer block statement and goes to `evalProgram` where the value gets unwrapped
-		if result != nil && result.Type() == object.RETURN_VALUE_OBJ {
-			return result
+		if result != nil {
+			rt := result.Type()
+
+			if rt == object.RETURN_VALUE_OBJ || rt == object.ERROR_OBJ {
+				return result
+			}
 		}
 	}
 
@@ -85,6 +108,10 @@ func evalBlockStatement(block *ast.BlockStatement) object.Object {
 
 func evalIfExpression(ie *ast.IfExpression) object.Object {
 	condition := Eval(ie.Condition)
+
+	if isError(condition) {
+		return condition
+	}
 
 	if isTruthy(condition) {
 		return Eval(ie.Consequence)
@@ -120,8 +147,12 @@ func evalInfixExpression(
 		return nativeBoolToBooleanObject(left == right)
 	case operator == "!=":
 		return nativeBoolToBooleanObject(left != right)
+	case left.Type() != right.Type():
+		return newError("type mismatch: %s %s %s",
+			left.Type(), operator, right.Type())
 	default:
-		return NULL
+		return newError("unknown operator: %s %s %s",
+			left.Type(), operator, right.Type())
 	}
 }
 
@@ -150,7 +181,8 @@ func evalIntegerInfixExpression(
 	case "!=":
 		return nativeBoolToBooleanObject(leftValue != rightValue)
 	default:
-		return NULL
+		return newError("unknown operator: %s %s %s",
+			left.Type(), operator, right.Type())
 	}
 }
 
@@ -176,11 +208,11 @@ func evalMinusPrefixOperatorExpression(right object.Object) object.Object {
 	// if the operand is not a int we return nil. but if it is, we extract the value of
 	// `*object.Integer` Then we allocate a new object to wrap a negated version of this value
 	if right == nil {
-		return NULL
+		return newError("unknown operator: -%s", right.Type())
 	}
 
 	if right.Type() != object.INTEGER_OBJ {
-		return NULL
+		return newError("unknown operator: -%s", right.Type())
 	}
 
 	value := right.(*object.Integer).Value
@@ -198,4 +230,16 @@ func evalBangOperatorExpression(right object.Object) object.Object {
 	default:
 		return FALSE
 	}
+}
+
+func newError(format string, a ...interface{}) *object.Error {
+	return &object.Error{Message: fmt.Sprintf(format, a...)}
+}
+
+func isError(obj object.Object) bool {
+	if obj != nil {
+		return obj.Type() == object.ERROR_OBJ
+	}
+
+	return false
 }
