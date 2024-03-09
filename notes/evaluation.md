@@ -357,3 +357,135 @@ Reason:
 > Monkey’s object system doesn’t allow pointer comparison for integer objects
 
 
+----
+
+## Conditionals
+
+we have to figure out decide when to evaludate what. that's the point of conditions
+
+
+```js
+if(x > 10){
+  puts("all good!");
+}else{
+  puts(" x is too low!");
+  shutdownSystem();
+}
+```
+> when evaluating the if-else expression the important thing is to only evaluate 
+the correct branch. if the condition is met. if it isnt met we must only eval
+the else branch
+
+in case of monkey, the consequence part of the conditional will be evaluated when the 
+condition is 'truthy'. and 'truthy' means: it's not `null` and its not `false`. 
+it doesn't necessarily need to be `true`
+
+```js
+let x = 10;
+if (x) {
+  puts("everything okay!");
+} else {
+  puts("x is too high!");
+  shutdownSystem();
+}
+```
+
+>in this case `"everything okay!"` should be printed. because `x` is bound to `10`, evaluates to `10`
+and `10` is not `null` not `false`. 
+
+Also in monkey the conditional does't evaluate to a value it's suppose to return `NULL`
+
+
+# Return Statements
+```go
+5 * 5 * 5;
+return 10;
+9 * 9 * 9;
+```
+when evaludated this should return 10. and most important thing is the last line `9 * 9 * 9;`
+should not get evaluated since its a early return. 
+
+There are a few different ways to implement return statements. In some host languages 
+we could use gotos or exceptions. But in Go a `rescue` or `catch` are not easy to 
+come by and we don’t really have the option of using gotos in a clean way.
+
+https://en.wikipedia.org/wiki/Goto
+
+
+```go
+func Eval(node ast.Node) object.Object {
+	switch node := node.(type) {
+	// ...
+	case *ast.ReturnStatement:
+		// we eval the expression associated with the return statement.
+		// if the last eval expression associated with return statement. we then
+		// wrap the result of this call to `Eval` in our new `object.ReturnValue` so we can
+		// keep track on this
+		val := Eval(node.ReturnValue)
+		return &object.ReturnValue{Value: val}
+	}
+	return nil
+}
+
+func evalProgram(stmts []ast.Statement) object.Object {
+	var result object.Object
+
+	for _, statement := range stmts {
+		result = Eval(statement)
+		// in case the last eval result is a `object.ReturnValue` if so we stop the
+		// evaluation and return the unwrapped value. we dont need to return an `object.ReturlValue`
+		// but only the value its wrapping which is what the user expected.
+
+		if returnValue, ok := result.(*object.ReturnValue); ok {
+			return returnValue.Value
+		}
+	}
+
+	return result
+}
+```
+
+the problem with our implementation is we dont keep track of `object.ReturlValues` for longer 
+and can't unwrap their values on the first enconter. for example in the below example 
+
+
+```go
+if (10 > 1) {
+  if (10 > 1) {
+    return 10;
+  }
+
+  return 1;
+}
+```
+
+this should return 10 but our code will return `1`. 
+
+```go
+func evalBlockStatement(block *ast.BlockStatement) object.Object {
+	var result object.Object
+
+	for _, statement := range block.Statements {
+		result = Eval(statement)
+		// when we have block statements we cant unwrap the result in the first sight, because
+		// we need to furthure keep track of its so we can stop execution in outermost block
+		// statement.
+
+		// here we dont explicity don't unwrap the return value and only check the `Type()`
+		// of each evaluation result, if it's `object.RETURN_VALUE_OBJ`
+		// we return the value. without unwrapping it's `.Value` so it stops the execution
+		// in a possible outer block statement and goes to `evalProgram` where the value gets unwrapped
+		if result != nil && result.Type() == object.RETURN_VALUE_OBJ {
+			return result
+		}
+	}
+
+	return result
+}
+```
+
+To be able to handle this when evaluating block statement we check for the `result.Type()` if its 
+`object.RETURN_VALUE_OBJ` we will return the value. 
+
+Note that we dont unwrap the value because when evalProgram is getting executed the value will 
+get unwrapped
